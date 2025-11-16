@@ -162,14 +162,17 @@ Make it:
 
     const websiteData = JSON.parse(aiResponse);
 
+    // Validate and add default values
+    const validatedData = validateAndFixData(websiteData);
+
     // Generate multi-page HTML files
-    const files = generateMultiPageWebsite(websiteData);
+    const files = generateMultiPageWebsite(validatedData);
 
     return NextResponse.json({
       success: true,
       data: {
-        content: websiteData,
-        seo: websiteData.seo,
+        content: validatedData,
+        seo: validatedData.seo,
         code: { files },
       },
     });
@@ -183,6 +186,132 @@ Make it:
       { status: 500 }
     );
   }
+}
+
+function validateAndFixData(data: any): any {
+  // Ensure all required fields exist with defaults
+  return {
+    businessName: data.businessName || "My Business",
+    tagline: data.tagline || "Your trusted partner",
+    description: data.description || "We provide excellent services to our customers.",
+    theme: {
+      primaryColor: data.theme?.primaryColor || "#3B82F6",
+      secondaryColor: data.theme?.secondaryColor || "#8B5CF6",
+      accentColor: data.theme?.accentColor || "#EC4899",
+      style: data.theme?.style || "modern"
+    },
+    pages: {
+      home: {
+        hero: {
+          title: data.pages?.home?.hero?.title || "Welcome to " + (data.businessName || "Our Business"),
+          subtitle: data.pages?.home?.hero?.subtitle || "We provide the best services for your needs.",
+          cta: data.pages?.home?.hero?.cta || "Get Started",
+          imageKeyword: data.pages?.home?.hero?.imageKeyword || "business office"
+        },
+        sections: data.pages?.home?.sections || [
+          {
+            type: "features",
+            title: "Our Features",
+            subtitle: "What we offer",
+            items: [
+              {
+                title: "Quality Service",
+                description: "We provide top-notch quality in everything we do.",
+                icon: "⭐",
+                imageKeyword: "quality"
+              },
+              {
+                title: "Professional Team",
+                description: "Our experienced team is here to help you succeed.",
+                icon: "👥",
+                imageKeyword: "team"
+              },
+              {
+                title: "Great Support",
+                description: "24/7 customer support for all your needs.",
+                icon: "💬",
+                imageKeyword: "support"
+              }
+            ]
+          }
+        ]
+      },
+      about: {
+        hero: {
+          title: data.pages?.about?.hero?.title || "About Us",
+          subtitle: data.pages?.about?.hero?.subtitle || "Learn more about our story and mission.",
+          cta: data.pages?.about?.hero?.cta || "Contact Us",
+          imageKeyword: data.pages?.about?.hero?.imageKeyword || "about us"
+        },
+        sections: data.pages?.about?.sections || [
+          {
+            type: "story",
+            title: "Our Story",
+            content: "We are dedicated to providing excellent service to our customers. Our journey began with a simple mission: to make a difference.",
+            imageKeyword: "company story"
+          }
+        ]
+      },
+      services: {
+        hero: {
+          title: data.pages?.services?.hero?.title || "Our Services",
+          subtitle: data.pages?.services?.hero?.subtitle || "Explore what we can do for you.",
+          cta: data.pages?.services?.hero?.cta || "Get Started",
+          imageKeyword: data.pages?.services?.hero?.imageKeyword || "services"
+        },
+        sections: data.pages?.services?.sections || [
+          {
+            type: "services",
+            title: "What We Offer",
+            subtitle: "Our main services",
+            items: [
+              {
+                title: "Service 1",
+                description: "Professional service tailored to your needs.",
+                features: ["Feature 1", "Feature 2", "Feature 3"],
+                imageKeyword: "service"
+              },
+              {
+                title: "Service 2",
+                description: "Expert solutions for your business.",
+                features: ["Feature 1", "Feature 2", "Feature 3"],
+                imageKeyword: "solution"
+              }
+            ]
+          }
+        ]
+      },
+      contact: {
+        hero: {
+          title: data.pages?.contact?.hero?.title || "Contact Us",
+          subtitle: data.pages?.contact?.hero?.subtitle || "Get in touch with our team.",
+          cta: data.pages?.contact?.hero?.cta || "Send Message",
+          imageKeyword: data.pages?.contact?.hero?.imageKeyword || "contact"
+        },
+        contactInfo: {
+          email: data.pages?.contact?.contactInfo?.email || "info@example.com",
+          phone: data.pages?.contact?.contactInfo?.phone || "+1 (555) 123-4567",
+          address: data.pages?.contact?.contactInfo?.address || "123 Main St, City, Country",
+          social: data.pages?.contact?.contactInfo?.social || {
+            twitter: "company",
+            linkedin: "company",
+            instagram: "company"
+          }
+        },
+        locations: data.pages?.contact?.locations || []
+      }
+    },
+    navigation: data.navigation || ["Home", "About", "Services", "Contact"],
+    footer: {
+      description: data.footer?.description || data.description || "We provide excellent services.",
+      links: data.footer?.links || []
+    },
+    seo: {
+      title: data.seo?.title || (data.businessName || "My Business") + " - Professional Services",
+      description: data.seo?.description || data.description || "We provide professional services tailored to your needs.",
+      keywords: data.seo?.keywords || ["business", "services", "professional"]
+    }
+  };
 }
 
 function generateMultiPageWebsite(data: any): Record<string, string> {
@@ -743,7 +872,7 @@ function generateNavigation(data: any, currentPage: string): string {
     <div class="nav-container">
       <a href="preview.html" class="logo">${data.businessName}</a>
       <ul class="nav-links">
-        ${data.navigation.map((item: string) => {
+        ${(data.navigation || []).map((item: string) => {
           const page = item.toLowerCase();
           const href = page === 'home' ? 'preview.html' : `${page}.html`;
           return `<li><a href="${href}" ${currentPage === page ? 'style="color: var(--primary)"' : ''}>${item}</a></li>`;
@@ -772,7 +901,7 @@ function generateFooter(data: any): string {
         <div class="footer-links">
           <h4>Quick Links</h4>
           <ul>
-            ${data.navigation.map((item: string) => {
+            ${(data.navigation || []).map((item: string) => {
               const page = item.toLowerCase();
               const href = page === 'home' ? 'preview.html' : `${page}.html`;
               return `<li><a href="${href}">${item}</a></li>`;
@@ -840,7 +969,7 @@ function generateHomePage(data: any, css: string): string {
     </div>
   </section>
 
-  ${home.sections.map((section: any, index: number) => {
+  ${(home.sections || []).map((section: any, index: number) => {
     if (section.type === 'features' || section.type === 'benefits') {
       return `
   <!-- Features Section -->
@@ -851,7 +980,7 @@ function generateHomePage(data: any, css: string): string {
         <p>${section.subtitle || ''}</p>
       </div>
       <div class="grid grid-3">
-        ${section.items.map((item: any) => `
+        ${(section.items || []).map((item: any) => `
         <div class="card fade-in">
           ${item.imageKeyword ? `<img src="${getUnsplashUrl(item.imageKeyword, 600, 400)}" alt="${item.title}" loading="lazy">` : ''}
           <div class="card-icon">${item.icon || '✨'}</div>
@@ -869,7 +998,7 @@ function generateHomePage(data: any, css: string): string {
   <section class="stats">
     <div class="container">
       <div class="stats-grid">
-        ${section.items.map((item: any) => `
+        ${(section.items || []).map((item: any) => `
         <div class="stat-item fade-in">
           <h3>${item.value}</h3>
           <p>${item.label}</p>
@@ -889,7 +1018,7 @@ function generateHomePage(data: any, css: string): string {
         <p>${section.subtitle || ''}</p>
       </div>
       <div class="grid grid-2">
-        ${section.items.map((item: any) => `
+        ${(section.items || []).map((item: any) => `
         <div class="testimonial-card fade-in">
           <p class="testimonial-text">"${item.content}"</p>
           <div class="testimonial-author">
@@ -948,7 +1077,7 @@ function generateAboutPage(data: any, css: string): string {
     </div>
   </section>
 
-  ${about.sections.map((section: any, index: number) => {
+  ${(about.sections || []).map((section: any, index: number) => {
     if (section.type === 'story' || section.type === 'mission') {
       return `
   <!-- ${section.title} Section -->
@@ -974,7 +1103,7 @@ function generateAboutPage(data: any, css: string): string {
         <p>${section.subtitle || ''}</p>
       </div>
       <div class="grid grid-3">
-        ${section.items.map((item: any) => `
+        ${(section.items || []).map((item: any) => `
         <div class="card">
           ${item.imageKeyword ? `<img src="${getUnsplashUrl(item.imageKeyword, 600, 400)}" alt="${item.title}" loading="lazy">` : ''}
           <div class="card-icon">${item.icon || '⭐'}</div>
@@ -1020,7 +1149,7 @@ function generateServicesPage(data: any, css: string): string {
     </div>
   </section>
 
-  ${services.sections.map((section: any, index: number) => {
+  ${(services.sections || []).map((section: any, index: number) => {
     if (section.type === 'services') {
       return `
   <!-- Services Grid -->
@@ -1031,14 +1160,14 @@ function generateServicesPage(data: any, css: string): string {
         <p>${section.subtitle || ''}</p>
       </div>
       <div class="grid grid-2">
-        ${section.items.map((item: any) => `
+        ${(section.items || []).map((item: any) => `
         <div class="card">
           ${item.imageKeyword ? `<img src="${getUnsplashUrl(item.imageKeyword, 800, 500)}" alt="${item.title}" loading="lazy">` : ''}
           <h3>${item.title}</h3>
           <p style="margin-bottom: 1.5rem;">${item.description}</p>
           ${item.features ? `
           <ul style="list-style: none; padding: 0;">
-            ${item.features.map((feature: string) => `
+            ${(item.features || []).map((feature: string) => `
             <li style="padding: 0.5rem 0; color: #666;">✓ ${feature}</li>
             `).join('')}
           </ul>
@@ -1060,7 +1189,7 @@ function generateServicesPage(data: any, css: string): string {
         <p style="color: rgba(255,255,255,0.9);">${section.subtitle || ''}</p>
       </div>
       <div class="grid grid-4">
-        ${section.items.map((item: any, idx: number) => `
+        ${(section.items || []).map((item: any, idx: number) => `
         <div style="text-align: center;">
           <div style="width: 60px; height: 60px; background: white; color: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; margin: 0 auto 1.5rem;">${idx + 1}</div>
           <h3 style="margin-bottom: 1rem;">${item.title}</h3>
@@ -1184,7 +1313,7 @@ function generateContactPage(data: any, css: string): string {
         <h2>Our Locations</h2>
       </div>
       <div class="grid grid-3">
-        ${contact.locations.map((location: any) => `
+        ${(contact.locations || []).map((location: any) => `
         <div class="card">
           <h3 style="color: var(--primary); margin-bottom: 1rem;">${location.city}</h3>
           <p style="color: #666; margin-bottom: 0.5rem;">${location.address}</p>
