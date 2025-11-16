@@ -1,58 +1,95 @@
 import { NextRequest, NextResponse } from "next/server";
 import groq, { MODELS } from "@/lib/groq";
-import type { WebsiteInput, GeneratedWebsite } from "@/types";
 
 export async function POST(request: NextRequest) {
   try {
-    const input: WebsiteInput = await request.json();
+    const { prompt } = await request.json();
 
-    // Validate input
-    if (!input.businessName || !input.businessDescription) {
+    if (!prompt || typeof prompt !== "string") {
       return NextResponse.json(
-        { error: "Business name and description are required" },
+        { error: "Prompt is required" },
         { status: 400 }
       );
     }
 
-    // Generate website content using AI
-    const prompt = createWebsiteGenerationPrompt(input);
-
+    // Generate website using AI
     const completion = await groq.chat.completions.create({
       messages: [
         {
           role: "system",
-          content:
-            "You are an expert web developer and designer. Generate complete, professional website content and structure based on user requirements. Always respond with valid JSON only.",
+          content: `You are an expert web designer and developer. Generate a complete, beautiful, professional website based on user requirements.
+
+IMPORTANT: Return ONLY valid JSON with this exact structure:
+{
+  "businessName": "Extracted business name",
+  "tagline": "Short catchy tagline",
+  "description": "Brief description",
+  "theme": {
+    "primaryColor": "#hexcolor",
+    "secondaryColor": "#hexcolor",
+    "accentColor": "#hexcolor"
+  },
+  "sections": [
+    {
+      "type": "hero|features|about|testimonials|contact|cta",
+      "title": "Section title",
+      "subtitle": "Section subtitle",
+      "content": "Main content",
+      "items": [...] // for features, testimonials, etc.
+    }
+  ],
+  "seo": {
+    "title": "SEO title",
+    "description": "Meta description"
+  }
+}
+
+Generate 5-7 diverse sections with professional content. Use Unsplash image URLs for visuals.`,
         },
         {
           role: "user",
-          content: prompt,
+          content: `Create a complete professional website for: ${prompt}
+
+Include:
+- Hero section with compelling headline
+- About/Features section (3-4 items with icons)
+- Testimonials (2-3)
+- Call-to-action section
+- Contact section
+
+Make it visually stunning with modern design trends.`,
         },
       ],
       model: MODELS.LLAMA_70B,
-      temperature: 0.7,
+      temperature: 0.8,
       max_tokens: 8000,
       response_format: { type: "json_object" },
     });
 
-    const generatedContent = completion.choices[0]?.message?.content;
-
-    if (!generatedContent) {
-      throw new Error("No content generated from AI");
+    const aiResponse = completion.choices[0]?.message?.content;
+    if (!aiResponse) {
+      throw new Error("No response from AI");
     }
 
-    const websiteData: GeneratedWebsite = JSON.parse(generatedContent);
+    const websiteData = JSON.parse(aiResponse);
 
-    // Generate Next.js code files
-    const codeFiles = generateNextJsFiles(websiteData, input);
-    websiteData.code = { files: codeFiles };
+    // Generate HTML preview
+    const previewHTML = generatePreviewHTML(websiteData);
+
+    // Generate Next.js files
+    const files = generateNextJsFiles(websiteData);
+    files["preview.html"] = previewHTML;
 
     return NextResponse.json({
       success: true,
-      data: websiteData,
+      data: {
+        content: websiteData,
+        seo: websiteData.seo,
+        code: { files },
+      },
     });
   } catch (error) {
-    console.error("Error generating website:", error);
+    console.error("Error:", error);
     return NextResponse.json(
       {
         success: false,
@@ -63,106 +100,409 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function createWebsiteGenerationPrompt(input: WebsiteInput): string {
-  return `
-Generate a complete, professional website for the following business:
+function generatePreviewHTML(data: any): string {
+  const { businessName, tagline, theme, sections } = data;
 
-Business Name: ${input.businessName}
-Description: ${input.businessDescription}
-${input.targetAudience ? `Target Audience: ${input.targetAudience}` : ""}
-${input.location ? `Location: ${input.location}` : ""}
-Services/Products: ${input.services}
-Theme Style: ${input.themeStyle}
-${input.primaryColor ? `Primary Color: ${input.primaryColor}` : ""}
-${input.secondaryColor ? `Secondary Color: ${input.secondaryColor}` : ""}
+  const sectionsHTML = sections
+    .map((section: any) => {
+      switch (section.type) {
+        case "hero":
+          return `
+<section class="hero">
+  <div class="container">
+    <h1 class="hero-title">${section.title}</h1>
+    <p class="hero-subtitle">${section.subtitle || tagline}</p>
+    <button class="cta-button">Get Started</button>
+  </div>
+</section>`;
 
-Generate a JSON response with the following structure:
-{
-  "content": {
-    "hero": {
-      "heading": "Catchy, engaging headline",
-      "subheading": "Supporting text that explains the value proposition",
-      "ctaText": "Call to action button text"
-    },
-    "about": {
-      "title": "About section title",
-      "description": "Detailed about section (2-3 paragraphs)"
-    },
-    "services": [
-      {
-        "title": "Service name",
-        "description": "Service description",
-        "icon": "lucide-react icon name (e.g., Sparkles, Rocket, etc.)"
+        case "features":
+          return `
+<section class="features">
+  <div class="container">
+    <h2 class="section-title">${section.title}</h2>
+    <p class="section-subtitle">${section.subtitle || ""}</p>
+    <div class="features-grid">
+      ${(section.items || [])
+        .map(
+          (item: any) => `
+        <div class="feature-card">
+          <div class="feature-icon">${item.icon || "✨"}</div>
+          <h3>${item.title}</h3>
+          <p>${item.description}</p>
+        </div>
+      `
+        )
+        .join("")}
+    </div>
+  </div>
+</section>`;
+
+        case "about":
+          return `
+<section class="about">
+  <div class="container">
+    <div class="about-content">
+      <div class="about-text">
+        <h2 class="section-title">${section.title}</h2>
+        <p>${section.content}</p>
+      </div>
+      <div class="about-image">
+        <img src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&h=400&fit=crop" alt="About" />
+      </div>
+    </div>
+  </div>
+</section>`;
+
+        case "testimonials":
+          return `
+<section class="testimonials">
+  <div class="container">
+    <h2 class="section-title">${section.title}</h2>
+    <div class="testimonials-grid">
+      ${(section.items || [])
+        .map(
+          (item: any) => `
+        <div class="testimonial-card">
+          <p class="testimonial-text">"${item.content}"</p>
+          <div class="testimonial-author">
+            <strong>${item.name}</strong>
+            <span>${item.role}</span>
+          </div>
+        </div>
+      `
+        )
+        .join("")}
+    </div>
+  </div>
+</section>`;
+
+        case "cta":
+          return `
+<section class="cta">
+  <div class="container">
+    <h2>${section.title}</h2>
+    <p>${section.subtitle || ""}</p>
+    <button class="cta-button">${section.buttonText || "Get Started"}</button>
+  </div>
+</section>`;
+
+        case "contact":
+          return `
+<section class="contact">
+  <div class="container">
+    <h2 class="section-title">${section.title}</h2>
+    <div class="contact-grid">
+      <div class="contact-form">
+        <input type="text" placeholder="Your Name" />
+        <input type="email" placeholder="Your Email" />
+        <textarea placeholder="Your Message" rows="5"></textarea>
+        <button class="cta-button">Send Message</button>
+      </div>
+      <div class="contact-info">
+        ${(section.items || [])
+          .map(
+            (item: any) => `
+          <div class="contact-item">
+            <strong>${item.label}</strong>
+            <p>${item.value}</p>
+          </div>
+        `
+          )
+          .join("")}
+      </div>
+    </div>
+  </div>
+</section>`;
+
+        default:
+          return "";
       }
-    ],
-    "testimonials": [
-      {
-        "name": "Customer name",
-        "role": "Customer role/position",
-        "content": "Testimonial text"
-      }
-    ],
-    "faq": [
-      {
-        "question": "FAQ question",
-        "answer": "FAQ answer"
-      }
-    ],
-    "contact": {
-      "email": "suggested email",
-      "phone": "suggested phone format",
-      "address": "${input.location || "123 Main St"}"
+    })
+    .join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${businessName}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-  },
-  "design": {
-    "primaryColor": "${input.primaryColor || "#3B82F6"}",
-    "secondaryColor": "${input.secondaryColor || "#8B5CF6"}",
-    "accentColor": "Complementary accent color",
-    "font": {
-      "heading": "Modern font for headings",
-      "body": "Readable font for body text"
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      color: #333;
     }
-  },
-  "seo": {
-    "title": "SEO-optimized page title (50-60 chars)",
-    "description": "SEO meta description (150-160 chars)",
-    "keywords": ["keyword1", "keyword2", "keyword3"]
-  }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    section {
+      padding: 80px 0;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, ${theme.primaryColor}, ${theme.secondaryColor});
+      color: white;
+      text-align: center;
+      padding: 120px 0;
+    }
+
+    .hero-title {
+      font-size: 3.5rem;
+      font-weight: 800;
+      margin-bottom: 20px;
+    }
+
+    .hero-subtitle {
+      font-size: 1.5rem;
+      margin-bottom: 30px;
+      opacity: 0.9;
+    }
+
+    .cta-button {
+      background: white;
+      color: ${theme.primaryColor};
+      padding: 15px 40px;
+      border: none;
+      border-radius: 50px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .cta-button:hover {
+      transform: translateY(-2px);
+    }
+
+    .section-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 15px;
+      color: #1a1a1a;
+    }
+
+    .section-subtitle {
+      text-align: center;
+      font-size: 1.2rem;
+      color: #666;
+      margin-bottom: 50px;
+    }
+
+    .features {
+      background: #f9fafb;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin-top: 50px;
+    }
+
+    .feature-card {
+      background: white;
+      padding: 40px;
+      border-radius: 15px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      text-align: center;
+      transition: transform 0.3s;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-5px);
+    }
+
+    .feature-icon {
+      font-size: 3rem;
+      margin-bottom: 20px;
+    }
+
+    .feature-card h3 {
+      font-size: 1.5rem;
+      margin-bottom: 15px;
+      color: ${theme.primaryColor};
+    }
+
+    .about {
+      background: white;
+    }
+
+    .about-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+
+    .about-text p {
+      font-size: 1.1rem;
+      line-height: 1.8;
+      color: #555;
+      margin-top: 20px;
+    }
+
+    .about-image img {
+      width: 100%;
+      border-radius: 15px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .testimonials {
+      background: linear-gradient(135deg, ${theme.primaryColor}15, ${theme.secondaryColor}15);
+    }
+
+    .testimonials-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin-top: 50px;
+    }
+
+    .testimonial-card {
+      background: white;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .testimonial-text {
+      font-size: 1.1rem;
+      font-style: italic;
+      margin-bottom: 20px;
+      color: #555;
+    }
+
+    .testimonial-author {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .testimonial-author strong {
+      color: ${theme.primaryColor};
+      font-size: 1.1rem;
+    }
+
+    .testimonial-author span {
+      color: #888;
+      font-size: 0.9rem;
+    }
+
+    .cta {
+      background: linear-gradient(135deg, ${theme.primaryColor}, ${theme.secondaryColor});
+      color: white;
+      text-align: center;
+    }
+
+    .cta h2 {
+      font-size: 2.5rem;
+      margin-bottom: 15px;
+    }
+
+    .cta p {
+      font-size: 1.2rem;
+      margin-bottom: 30px;
+      opacity: 0.9;
+    }
+
+    .contact {
+      background: white;
+    }
+
+    .contact-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      margin-top: 50px;
+    }
+
+    .contact-form input,
+    .contact-form textarea {
+      width: 100%;
+      padding: 15px;
+      margin-bottom: 20px;
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 1rem;
+    }
+
+    .contact-form input:focus,
+    .contact-form textarea:focus {
+      outline: none;
+      border-color: ${theme.primaryColor};
+    }
+
+    .contact-info {
+      display: flex;
+      flex-direction: column;
+      gap: 25px;
+    }
+
+    .contact-item strong {
+      display: block;
+      color: ${theme.primaryColor};
+      font-size: 1.1rem;
+      margin-bottom: 5px;
+    }
+
+    .contact-item p {
+      color: #666;
+    }
+
+    @media (max-width: 768px) {
+      .hero-title {
+        font-size: 2.5rem;
+      }
+
+      .about-content,
+      .contact-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .section-title {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  ${sectionsHTML}
+</body>
+</html>`;
 }
 
-Make it professional, engaging, and tailored to the ${input.themeStyle} style.
-Include 3-5 services, 2-3 testimonials, and 4-6 FAQ items.
-`;
-}
-
-function generateNextJsFiles(
-  website: GeneratedWebsite,
-  input: WebsiteInput
-): Record<string, string> {
+function generateNextJsFiles(data: any): Record<string, string> {
   const files: Record<string, string> = {};
 
   // package.json
   files["package.json"] = JSON.stringify(
     {
-      name: input.businessName.toLowerCase().replace(/\s+/g, "-"),
-      version: "0.1.0",
-      private: true,
+      name: data.businessName.toLowerCase().replace(/\s+/g, "-"),
+      version: "1.0.0",
       scripts: {
         dev: "next dev",
         build: "next build",
         start: "next start",
-        lint: "next lint",
       },
       dependencies: {
         next: "16.0.3",
         react: "^19",
         "react-dom": "^19",
-        "lucide-react": "^0.553.0",
       },
       devDependencies: {
         "@types/node": "^20",
         "@types/react": "^19",
-        "@types/react-dom": "^19",
         "@tailwindcss/postcss": "^4",
         tailwindcss: "^4",
         typescript: "^5",
@@ -172,351 +512,8 @@ function generateNextJsFiles(
     2
   );
 
-  // tailwind.config.ts
-  files["tailwind.config.ts"] = `import type { Config } from "tailwindcss";
-
-const config: Config = {
-  content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
-  theme: {
-    extend: {
-      colors: {
-        primary: "${website.design.primaryColor}",
-        secondary: "${website.design.secondaryColor}",
-        accent: "${website.design.accentColor}",
-      },
-    },
-  },
-  plugins: [],
-};
-export default config;
-`;
-
-  // postcss.config.mjs
-  files["postcss.config.mjs"] = `/** @type {import('postcss').Postcss} */
-export default {
-  plugins: {
-    '@tailwindcss/postcss': {},
-  },
-};
-`;
-
-  // tsconfig.json
-  files["tsconfig.json"] = JSON.stringify(
-    {
-      compilerOptions: {
-        target: "ES2017",
-        lib: ["dom", "dom.iterable", "esnext"],
-        allowJs: true,
-        skipLibCheck: true,
-        strict: true,
-        noEmit: true,
-        esModuleInterop: true,
-        module: "esnext",
-        moduleResolution: "bundler",
-        resolveJsonModule: true,
-        isolatedModules: true,
-        jsx: "preserve",
-        incremental: true,
-        plugins: [{ name: "next" }],
-        paths: { "@/*": ["./*"] },
-      },
-      include: ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-      exclude: ["node_modules"],
-    },
-    null,
-    2
-  );
-
-  // next.config.ts
-  files["next.config.ts"] = `import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {};
-
-export default nextConfig;
-`;
-
-  // app/globals.css
-  files["app/globals.css"] = `@import "tailwindcss";
-
-:root {
-  --primary: ${website.design.primaryColor};
-  --secondary: ${website.design.secondaryColor};
-  --accent: ${website.design.accentColor};
-}
-
-body {
-  font-family: system-ui, -apple-system, sans-serif;
-}
-
-h1, h2, h3, h4, h5, h6 {
-  font-weight: 700;
-}
-`;
-
-  // app/layout.tsx
-  files["app/layout.tsx"] = `import type { Metadata } from "next";
-import "./globals.css";
-
-export const metadata: Metadata = {
-  title: "${website.seo.title}",
-  description: "${website.seo.description}",
-  keywords: ${JSON.stringify(website.seo.keywords)},
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="en">
-      <body className="antialiased">{children}</body>
-    </html>
-  );
-}
-`;
-
-  // app/page.tsx - Main website page
-  files["app/page.tsx"] = generateMainPage(website, input);
-
-  // README.md
-  files["README.md"] = `# ${input.businessName}
-
-${input.businessDescription}
-
-## Getting Started
-
-1. Install dependencies:
-\`\`\`bash
-npm install
-\`\`\`
-
-2. Run the development server:
-\`\`\`bash
-npm run dev
-\`\`\`
-
-3. Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## Build for Production
-
-\`\`\`bash
-npm run build
-npm start
-\`\`\`
-
-## Deploy
-
-Deploy easily on [Vercel](https://vercel.com):
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
-
----
-
-Generated with AI Website Builder
-`;
+  // Add other necessary files
+  files["README.md"] = `# ${data.businessName}\n\n${data.description}\n\n## Getting Started\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\``;
 
   return files;
-}
-
-function generateMainPage(website: GeneratedWebsite, input: WebsiteInput): string {
-  const { content } = website;
-  const icons = content.services.map((s) => s.icon).join(", ");
-
-  return `"use client";
-
-import { ${icons} } from "lucide-react";
-import { useState } from "react";
-
-export default function Home() {
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-
-  return (
-    <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full bg-white/80 backdrop-blur-md z-50 border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="text-2xl font-bold text-primary">
-              ${input.businessName}
-            </div>
-            <div className="hidden md:flex space-x-8">
-              <a href="#home" className="text-gray-700 hover:text-primary transition">Home</a>
-              <a href="#about" className="text-gray-700 hover:text-primary transition">About</a>
-              <a href="#services" className="text-gray-700 hover:text-primary transition">Services</a>
-              <a href="#testimonials" className="text-gray-700 hover:text-primary transition">Testimonials</a>
-              <a href="#contact" className="text-gray-700 hover:text-primary transition">Contact</a>
-            </div>
-            <button className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition">
-              Get Started
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section id="home" className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto text-center">
-          <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6">
-            ${content.hero.heading}
-          </h1>
-          <p className="text-xl md:text-2xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            ${content.hero.subheading}
-          </p>
-          <button className="bg-primary text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-primary/90 transition transform hover:scale-105">
-            ${content.hero.ctaText}
-          </button>
-        </div>
-      </section>
-
-      {/* About Section */}
-      <section id="about" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-4xl font-bold text-center text-gray-900 mb-12">
-            ${content.about.title}
-          </h2>
-          <p className="text-lg text-gray-700 leading-relaxed">
-            ${content.about.description}
-          </p>
-        </div>
-      </section>
-
-      {/* Services Section */}
-      <section id="services" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-4xl font-bold text-center text-gray-900 mb-16">
-            Our Services
-          </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            ${content.services
-              .map((service, idx) => {
-                const IconComponent = service.icon;
-                return `<div key={${idx}} className="bg-white p-8 rounded-xl shadow-lg hover:shadow-xl transition border border-gray-100">
-              <div className="w-14 h-14 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                <${IconComponent} className="w-7 h-7 text-primary" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">
-                ${service.title}
-              </h3>
-              <p className="text-gray-600">
-                ${service.description}
-              </p>
-            </div>`;
-              })
-              .join("\n            ")}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials Section */}
-      <section id="testimonials" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-4xl font-bold text-center text-gray-900 mb-16">
-            What Our Clients Say
-          </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            ${
-              content.testimonials
-                ?.map(
-                  (testimonial, idx) => `<div key={${idx}} className="bg-white p-8 rounded-xl shadow-lg">
-              <p className="text-gray-700 mb-6 italic">
-                "${testimonial.content}"
-              </p>
-              <div className="border-t pt-4">
-                <p className="font-bold text-gray-900">${testimonial.name}</p>
-                <p className="text-sm text-gray-500">${testimonial.role}</p>
-              </div>
-            </div>`
-                )
-                .join("\n            ") || ""
-            }
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-4xl font-bold text-center text-gray-900 mb-16">
-            Frequently Asked Questions
-          </h2>
-          <div className="space-y-4">
-            ${
-              content.faq
-                ?.map(
-                  (faq, idx) => `<div key={${idx}} className="border border-gray-200 rounded-lg">
-              <button
-                onClick={() => setOpenFaq(openFaq === ${idx} ? null : ${idx})}
-                className="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50"
-              >
-                <span className="font-semibold text-gray-900">${faq.question}</span>
-                <span className="text-primary">{openFaq === ${idx} ? "−" : "+"}</span>
-              </button>
-              {openFaq === ${idx} && (
-                <div className="px-6 pb-4 text-gray-600">
-                  ${faq.answer}
-                </div>
-              )}
-            </div>`
-                )
-                .join("\n            ") || ""
-            }
-          </div>
-        </div>
-      </section>
-
-      {/* Contact Section */}
-      <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-primary text-white">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl font-bold mb-8">Get In Touch</h2>
-          <p className="text-xl mb-12">
-            Ready to get started? Contact us today!
-          </p>
-          <div className="grid md:grid-cols-3 gap-8">
-            ${
-              content.contact.email
-                ? `<div>
-              <p className="font-semibold mb-2">Email</p>
-              <p>${content.contact.email}</p>
-            </div>`
-                : ""
-            }
-            ${
-              content.contact.phone
-                ? `<div>
-              <p className="font-semibold mb-2">Phone</p>
-              <p>${content.contact.phone}</p>
-            </div>`
-                : ""
-            }
-            ${
-              content.contact.address
-                ? `<div>
-              <p className="font-semibold mb-2">Address</p>
-              <p>${content.contact.address}</p>
-            </div>`
-                : ""
-            }
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto text-center">
-          <p className="text-2xl font-bold mb-4">${input.businessName}</p>
-          <p className="text-gray-400 mb-8">${input.businessDescription}</p>
-          <p className="text-gray-500 text-sm">
-            © {new Date().getFullYear()} ${input.businessName}. All rights reserved.
-          </p>
-        </div>
-      </footer>
-    </div>
-  );
-}
-`;
 }

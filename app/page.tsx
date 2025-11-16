@@ -1,44 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { Sparkles, Download, Loader2, Eye } from "lucide-react";
+import { Sparkles, Loader2, Code, Eye, Download, Copy, Check } from "lucide-react";
 import JSZip from "jszip";
-import type { WebsiteInput, AIGenerationResult } from "@/types";
-
-const formSchema = z.object({
-  businessName: z.string().min(2, "Business name must be at least 2 characters"),
-  businessDescription: z.string().min(10, "Description must be at least 10 characters"),
-  targetAudience: z.string().optional(),
-  location: z.string().optional(),
-  services: z.string().min(5, "Please describe your services"),
-  primaryColor: z.string().optional(),
-  secondaryColor: z.string().optional(),
-  themeStyle: z.enum(["modern", "minimal", "corporate", "bold"]),
-});
-
-type FormData = z.infer<typeof formSchema>;
+import type { AIGenerationResult } from "@/types";
 
 export default function Home() {
+  const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedWebsite, setGeneratedWebsite] = useState<AIGenerationResult | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
+  const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
+  const [selectedFile, setSelectedFile] = useState<string>("app/page.tsx");
+  const [copied, setCopied] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    watch,
-  } = useForm<FormData>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      themeStyle: "modern",
-    },
-  });
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim()) return;
 
-  const onSubmit = async (data: FormData) => {
     setIsGenerating(true);
     setGeneratedWebsite(null);
 
@@ -48,14 +26,14 @@ export default function Home() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ prompt }),
       });
 
       const result: AIGenerationResult = await response.json();
       setGeneratedWebsite(result);
 
       if (result.success) {
-        setShowPreview(true);
+        setActiveTab("preview");
       }
     } catch (error) {
       console.error("Error generating website:", error);
@@ -74,336 +52,284 @@ export default function Home() {
     const zip = new JSZip();
     const files = generatedWebsite.data.code.files;
 
-    // Add all files to ZIP
     Object.entries(files).forEach(([path, content]) => {
       zip.file(path, content);
     });
 
-    // Generate and download ZIP
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${watch("businessName")?.toLowerCase().replace(/\s+/g, "-") || "website"}.zip`;
+    a.download = "my-website.zip";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
+  const copyCode = async () => {
+    if (!generatedWebsite?.data?.code?.files?.[selectedFile]) return;
+
+    await navigator.clipboard.writeText(generatedWebsite.data.code.files[selectedFile]);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">AI Website Builder</h1>
-                <p className="text-sm text-gray-500">Build your website in minutes</p>
-              </div>
+      <header className="border-b border-white/10 bg-black/20 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">AI Website Builder</h1>
+              <p className="text-xs text-purple-300">Powered by Groq AI</p>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid lg:grid-cols-2 gap-12">
-          {/* Form Section */}
-          <div>
-            <div className="bg-white rounded-2xl shadow-xl p-8">
-              <div className="mb-8">
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                  Create Your Website
-                </h2>
-                <p className="text-gray-600">
-                  Fill in the details below and let AI generate your professional website
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {!generatedWebsite && (
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-12">
+              <h2 className="text-5xl font-bold text-white mb-4">
+                Build Your Dream Website
+                <br />
+                <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  With AI in Seconds
+                </span>
+              </h2>
+              <p className="text-xl text-gray-300">
+                Just describe your vision, and watch AI create a complete, professional website
+              </p>
+            </div>
+
+            <form onSubmit={onSubmit} className="space-y-6">
+              <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-8">
+                <label className="block text-sm font-semibold text-white mb-3">
+                  Describe your website
+                </label>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={6}
+                  placeholder="Example: Create a modern tech startup website for an AI company. Include hero section with gradient background, features section with 3 services, testimonials, and contact form. Use purple and blue color scheme."
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition resize-none"
+                  disabled={isGenerating}
+                />
+                <p className="mt-2 text-sm text-gray-400">
+                  Be specific about design, colors, sections, and features you want
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                {/* Business Name */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Business Name *
-                  </label>
-                  <input
-                    {...register("businessName")}
-                    type="text"
-                    placeholder="e.g., Tech Solutions Inc."
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  />
-                  {errors.businessName && (
-                    <p className="mt-1 text-sm text-red-600">{errors.businessName.message}</p>
-                  )}
-                </div>
+              <button
+                type="submit"
+                disabled={isGenerating || !prompt.trim()}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-5 rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 text-lg shadow-2xl shadow-purple-500/50"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    Creating Your Website...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-6 h-6" />
+                    Generate Website
+                  </>
+                )}
+              </button>
+            </form>
 
-                {/* Business Description */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Business Description *
-                  </label>
-                  <textarea
-                    {...register("businessDescription")}
-                    rows={4}
-                    placeholder="Describe your business, what you do, and what makes you unique..."
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
-                  />
-                  {errors.businessDescription && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.businessDescription.message}
-                    </p>
-                  )}
+            {isGenerating && (
+              <div className="mt-12 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-8">
+                <div className="text-center">
+                  <Loader2 className="w-16 h-16 text-purple-400 animate-spin mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-white mb-2">
+                    AI is working its magic...
+                  </h3>
+                  <div className="space-y-2 text-sm text-gray-400">
+                    <p>✨ Analyzing your requirements...</p>
+                    <p>🎨 Designing beautiful layouts...</p>
+                    <p>💻 Writing clean code...</p>
+                    <p>🚀 Almost there...</p>
+                  </div>
                 </div>
+              </div>
+            )}
 
-                {/* Services */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Services / Products *
-                  </label>
-                  <textarea
-                    {...register("services")}
-                    rows={3}
-                    placeholder="List your main services or products (separate with commas)"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
-                  />
-                  {errors.services && (
-                    <p className="mt-1 text-sm text-red-600">{errors.services.message}</p>
-                  )}
+            {/* Features */}
+            <div className="mt-20 grid md:grid-cols-3 gap-6">
+              <div className="bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+                <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center mb-4">
+                  <Sparkles className="w-6 h-6 text-purple-400" />
                 </div>
+                <h3 className="text-lg font-semibold text-white mb-2">AI-Powered</h3>
+                <p className="text-gray-400 text-sm">
+                  Advanced AI generates professional websites tailored to your needs
+                </p>
+              </div>
+              <div className="bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+                <div className="w-12 h-12 bg-pink-500/20 rounded-lg flex items-center justify-center mb-4">
+                  <Code className="w-6 h-6 text-pink-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white mb-2">Production Ready</h3>
+                <p className="text-gray-400 text-sm">
+                  Clean, optimized Next.js code ready to deploy anywhere
+                </p>
+              </div>
+              <div className="bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+                <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-4">
+                  <Eye className="w-6 h-6 text-blue-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white mb-2">Live Preview</h3>
+                <p className="text-gray-400 text-sm">
+                  Instantly preview and customize your generated website
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
-                {/* Target Audience */}
+        {generatedWebsite?.success && generatedWebsite.data && (
+          <div className="space-y-6">
+            {/* Success Header */}
+            <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 backdrop-blur-xl rounded-2xl border border-green-500/30 p-6">
+              <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Target Audience
-                  </label>
-                  <input
-                    {...register("targetAudience")}
-                    type="text"
-                    placeholder="e.g., Small businesses, Entrepreneurs"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                  <h3 className="text-2xl font-bold text-white mb-1">
+                    ✨ Website Created Successfully!
+                  </h3>
+                  <p className="text-green-300">
+                    Your website is ready. Preview it below or download the code.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={downloadWebsite}
+                    className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg font-semibold transition flex items-center gap-2 border border-white/20"
+                  >
+                    <Download className="w-5 h-5" />
+                    Download ZIP
+                  </button>
+                  <button
+                    onClick={() => {
+                      setGeneratedWebsite(null);
+                      setPrompt("");
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold transition flex items-center gap-2"
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    New Website
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-2 bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 p-1">
+              <button
+                onClick={() => setActiveTab("preview")}
+                className={`flex-1 px-6 py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
+                  activeTab === "preview"
+                    ? "bg-purple-600 text-white"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <Eye className="w-5 h-5" />
+                Live Preview
+              </button>
+              <button
+                onClick={() => setActiveTab("code")}
+                className={`flex-1 px-6 py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
+                  activeTab === "code"
+                    ? "bg-purple-600 text-white"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <Code className="w-5 h-5" />
+                View Code
+              </button>
+            </div>
+
+            {/* Preview Tab */}
+            {activeTab === "preview" && (
+              <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2">
+                <div className="bg-white rounded-xl overflow-hidden" style={{ height: "800px" }}>
+                  <iframe
+                    srcDoc={generatedWebsite.data.code.files["preview.html"] || ""}
+                    className="w-full h-full"
+                    title="Website Preview"
+                    sandbox="allow-scripts"
                   />
                 </div>
+              </div>
+            )}
 
-                {/* Location */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Location
-                  </label>
-                  <input
-                    {...register("location")}
-                    type="text"
-                    placeholder="e.g., New York, USA"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  />
-                </div>
-
-                {/* Theme Style */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Theme Style *
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {["modern", "minimal", "corporate", "bold"].map((style) => (
-                      <label
-                        key={style}
-                        className="relative flex items-center justify-center px-4 py-3 border-2 border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 transition"
+            {/* Code Tab */}
+            {activeTab === "code" && (
+              <div className="grid grid-cols-4 gap-6">
+                {/* File List */}
+                <div className="col-span-1 bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 p-4 max-h-[800px] overflow-y-auto">
+                  <h4 className="text-sm font-semibold text-white mb-3">Files</h4>
+                  <div className="space-y-1">
+                    {Object.keys(generatedWebsite.data.code.files).map((file) => (
+                      <button
+                        key={file}
+                        onClick={() => setSelectedFile(file)}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${
+                          selectedFile === file
+                            ? "bg-purple-600 text-white"
+                            : "text-gray-400 hover:bg-white/5 hover:text-white"
+                        }`}
                       >
-                        <input
-                          {...register("themeStyle")}
-                          type="radio"
-                          value={style}
-                          className="sr-only peer"
-                        />
-                        <span className="text-sm font-medium text-gray-700 peer-checked:text-blue-600 capitalize">
-                          {style}
-                        </span>
-                        <div className="absolute inset-0 border-2 border-blue-600 rounded-lg opacity-0 peer-checked:opacity-100 transition" />
-                      </label>
+                        {file}
+                      </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Colors */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Primary Color
-                    </label>
-                    <input
-                      {...register("primaryColor")}
-                      type="color"
-                      className="w-full h-12 rounded-lg cursor-pointer border border-gray-300"
-                    />
+                {/* Code Viewer */}
+                <div className="col-span-3 bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                    <span className="text-sm font-mono text-gray-300">{selectedFile}</span>
+                    <button
+                      onClick={copyCode}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copy
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Secondary Color
-                    </label>
-                    <input
-                      {...register("secondaryColor")}
-                      type="color"
-                      className="w-full h-12 rounded-lg cursor-pointer border border-gray-300"
-                    />
-                  </div>
+                  <pre className="p-4 text-sm text-gray-300 font-mono overflow-x-auto max-h-[750px] overflow-y-auto">
+                    <code>{generatedWebsite.data.code.files[selectedFile]}</code>
+                  </pre>
                 </div>
-
-                {/* Submit Button */}
-                <button
-                  type="submit"
-                  disabled={isGenerating}
-                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Generating Your Website...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-5 h-5" />
-                      Generate Website
-                    </>
-                  )}
-                </button>
-              </form>
-            </div>
-          </div>
-
-          {/* Preview Section */}
-          <div>
-            <div className="bg-white rounded-2xl shadow-xl p-8 sticky top-8">
-              <h3 className="text-2xl font-bold text-gray-900 mb-6">Preview & Download</h3>
-
-              {!generatedWebsite && !isGenerating && (
-                <div className="text-center py-16">
-                  <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Eye className="w-10 h-10 text-gray-400" />
-                  </div>
-                  <p className="text-gray-500">
-                    Your generated website will appear here
-                  </p>
-                </div>
-              )}
-
-              {isGenerating && (
-                <div className="text-center py-16">
-                  <Loader2 className="w-16 h-16 text-blue-600 animate-spin mx-auto mb-4" />
-                  <p className="text-gray-600 font-medium">Generating your website...</p>
-                  <p className="text-sm text-gray-500 mt-2">This may take 15-30 seconds</p>
-                </div>
-              )}
-
-              {generatedWebsite?.success && generatedWebsite.data && (
-                <div className="space-y-6">
-                  {/* Success Message */}
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <p className="text-green-800 font-medium">
-                      ✅ Website generated successfully!
-                    </p>
-                  </div>
-
-                  {/* Website Details */}
-                  <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-700">SEO Title:</p>
-                      <p className="text-gray-900">{generatedWebsite.data.seo.title}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-700">Description:</p>
-                      <p className="text-gray-600 text-sm">
-                        {generatedWebsite.data.seo.description}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-700">Files Generated:</p>
-                      <p className="text-gray-900">
-                        {Object.keys(generatedWebsite.data.code.files).length} files
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Download Button */}
-                  <button
-                    onClick={downloadWebsite}
-                    className="w-full bg-green-600 text-white px-6 py-4 rounded-lg font-semibold hover:bg-green-700 transition flex items-center justify-center gap-2"
-                  >
-                    <Download className="w-5 h-5" />
-                    Download Website (ZIP)
-                  </button>
-
-                  {/* Instructions */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="font-semibold text-blue-900 mb-2">Next Steps:</p>
-                    <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                      <li>Extract the ZIP file</li>
-                      <li>Run: npm install</li>
-                      <li>Run: npm run dev</li>
-                      <li>Open http://localhost:3000</li>
-                    </ol>
-                  </div>
-                </div>
-              )}
-
-              {generatedWebsite?.error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="text-red-800 font-medium">❌ Error:</p>
-                  <p className="text-red-700 text-sm mt-1">{generatedWebsite.error}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Features Section */}
-        <div className="mt-20">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
-            How It Works
-          </h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-blue-600">1</span>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Enter Details</h3>
-              <p className="text-gray-600">
-                Provide your business information, services, and preferences
-              </p>
-            </div>
-            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-purple-600">2</span>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">AI Generation</h3>
-              <p className="text-gray-600">
-                Our AI creates a professional Next.js website tailored to your needs
-              </p>
-            </div>
-            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-green-600">3</span>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Download & Deploy</h3>
-              <p className="text-gray-600">
-                Download your website and deploy it anywhere in minutes
-              </p>
-            </div>
+            )}
           </div>
-        </div>
+        )}
+
+        {generatedWebsite?.error && (
+          <div className="max-w-3xl mx-auto bg-red-500/20 backdrop-blur-xl rounded-2xl border border-red-500/30 p-6">
+            <h3 className="text-xl font-bold text-red-300 mb-2">❌ Generation Failed</h3>
+            <p className="text-red-200">{generatedWebsite.error}</p>
+          </div>
+        )}
       </main>
-
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12 mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-lg font-semibold mb-2">AI Website Builder</p>
-          <p className="text-gray-400 text-sm">
-            Built with Next.js, TypeScript, Tailwind CSS, and Groq AI
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }
